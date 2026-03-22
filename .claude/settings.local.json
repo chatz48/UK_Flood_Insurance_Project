@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git checkout:*)",
+      "Bash(python:*)",
+      "Bash(curl -s \"https://nrfaapps.ceh.ac.uk/nrfa/ws/\")",
+      "Bash(curl -s \"https://nrfaapps.ceh.ac.uk/nrfa/ws/stations?format=json&fields=id,name\")",
+      "Bash(curl -s \"https://nrfaapps.ceh.ac.uk/nrfa/ws/station?format=json&fields=id,name&station=1001\")",
+      "Bash(curl -sv \"https://nrfaapps.ceh.ac.uk/nrfa/ws/catalogue?format=json&fields=id,name\")",
+      "Bash(curl -s \"https://nrfaapps.ceh.ac.uk/nrfa/ws/catalogue?format=json&fields=id,name\")",
+      "WebSearch",
+      "Bash(curl -s \"https://nrfaapps.ceh.ac.uk/nrfa/ws/station-info?station=43009&format=json-object\")",
+      "Bash(curl -s \"https://nrfaapps.ceh.ac.uk/nrfa/ws/station-info?station=all&format=json-object&fields=id,name,river,catchment-area,grid-reference,record-length,gdf-start-date,gdf-end-date\")",
+      "Bash(curl -s \"https://nrfaapps.ceh.ac.uk/nrfa/ws/station-info?station=*&format=json-object&fields=id,name,river,catchment-area,grid-reference,gdf-start-date,gdf-end-date,peak-flow-rejected,sensitivity\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(f''''Total stations: {len\\(d[\"\"data\"\"]\\)}''''\\); print\\(json.dumps\\(d[''''data''''][0], indent=2\\)\\)\")",
+      "Bash(curl -s \"https://nrfaapps.ceh.ac.uk/nrfa/ws/station-info?station=*&format=json-object&fields=id,name\")",
+      "Bash(curl -s \"https://nrfaapps.ceh.ac.uk/nrfa/ws/station-info?station=43009&format=json-object&fields=catchment-area,feh-descriptors\")",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s \"https://nrfaapps.ceh.ac.uk/nrfa/ws/time-series?format=json-object&data-type=amax-flow&station=43009\")",
+      "Bash(curl -s \"https://nrfaapps.ceh.ac.uk/nrfa/ws/station-info?station=43009&format=json-object&fields=id,name,river,location,grid-reference,catchment-area,waterbody-id,peak-flow-rejected,pctd-rejected,record-length,gdf-start-date,gdf-end-date,feh-pooling-group,sensitivity\")",
+      "Bash(curl -s \"https://nrfaapps.ceh.ac.uk/nrfa/ws/station-info?station=43009&format=json-object&fields=id,name,river,location,grid-reference,catchment-area,peak-flow-rejected,gdf-start-date,gdf-end-date,sensitivity\")",
+      "Bash(curl -v \"https://nrfaapps.ceh.ac.uk/nrfa/ws/station-info?station=43009&format=json-object&fields=id,name,river,location,grid-reference,catchment-area,peak-flow-rejected,gdf-start-date,gdf-end-date,sensitivity\")",
+      "Bash(curl -s \"https://nrfaapps.ceh.ac.uk/nrfa/ws/time-series?format=json-object&data-type=pot-flow&station=43009\")",
+      "Bash(curl -s \"https://nrfaapps.ceh.ac.uk/nrfa/ws/station-info?station=43009&format=json-object&fields=feh-descriptors\")",
+      "Bash(curl -s \"https://nrfaapps.ceh.ac.uk/nrfa/ws/station-info?station=*&format=json-object\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(f''''Count: {len\\(d[\"\"data\"\"]\\)}''''\\); print\\(json.dumps\\(d[''''data''''][0], indent=2\\)\\)\")",
+      "Bash(curl -s \"https://nrfaapps.ceh.ac.uk/nrfa/nrfa-api.html\")",
+      "Bash(python3 -c \"import sys; content=sys.stdin.read\\(\\); start=content.find\\(''''station-info''''\\); print\\(content[start:start+3000]\\)\")",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}

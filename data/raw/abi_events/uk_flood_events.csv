@@ -1,0 +1,14 @@
+event_id,start_date,end_date,name,type,insured_loss_gbp_m,economic_loss_gbp_m,properties_flooded,source,notes,confidence,year,insured_loss_per_property_gbp
+UK_FLOOD_2000_AUTUMN,2000-10-28,2000-11-10,2000 Autumn Floods,riverine,1300,2000,10000,ABI / DEFRA,"Worst UK flooding in 50 years at time. Yorkshire, Midlands, Wales.",medium,2000,130000.0
+UK_FLOOD_2002,2002-11-01,2002-11-30,2002 November Floods,riverine,400,600,4000,EA / ABI estimates,England and Wales flooding,low,2002,100000.0
+UK_FLOOD_2004_BOSCASTLE,2004-08-16,2004-08-16,Boscastle Flash Flood,surface_water,15,20,115,ABI,"Extreme localised flash flood, Cornwall. 2m flood depth.",high,2004,130435.0
+UK_FLOOD_2005_CARLISLE,2005-01-07,2005-01-09,Carlisle Floods 2005,riverine,272,400,3000,EA Post-Event Report,River Eden burst banks. 3 deaths. City centre inundated.,high,2005,90667.0
+UK_FLOOD_2007_SUMMER,2007-06-24,2007-07-25,2007 Summer Floods,combined_riverine_surface_water,3200,4500,55000,ABI / Pitt Review,"Largest UK flood event. Hull, Sheffield, Gloucestershire, Tewkesbury. 55,000 homes + 7,000 businesses. 13 deaths.",high,2007,58182.0
+UK_FLOOD_2009_CUMBRIA,2009-11-18,2009-11-20,Cumbria Floods 2009,riverine,174,276,1800,ABI / EA,Cockermouth badly damaged. Record 314mm rain in 24hrs.,high,2009,96667.0
+UK_FLOOD_2012,2012-06-01,2012-12-31,2012 Summer/Autumn Floods,multiple,600,900,8000,ABI estimates,Multiple events across the year. Wettest year on record for England.,medium,2012,75000.0
+UK_FLOOD_2013_14_WINTER,2013-12-05,2014-03-31,2013/14 Winter Floods,riverine_coastal,1100,1500,11000,ABI,Somerset Levels flooded for months. Thames corridor. Storm surges.,high,2013,100000.0
+UK_FLOOD_2015_WINTER,2015-12-05,2016-01-10,"Winter 2015/16 Floods (Storms Desmond, Eva, Frank)",riverine,1300,2300,16000,ABI,"Cumbria again worst hit. New UK rainfall records. York, Leeds flooded.",high,2015,81250.0
+UK_FLOOD_2019_20,2019-11-01,2020-03-31,2019/20 Winter Floods,riverine,360,500,4600,ABI,"South Yorkshire, Midlands, Wales. Storms Ciara and Dennis.",high,2019,78261.0
+UK_FLOOD_2021,2021-07-25,2021-08-01,2021 Summer Flooding,surface_water,140,200,1500,ABI estimates,London surface water flooding during heatwave-triggered storms.,medium,2021,93333.0
+UK_FLOOD_2023_BABET,2023-10-19,2023-10-21,Storm Babet 2023,riverine,200,350,3500,ABI estimates / news reports,Scotland and East Midlands. Record river levels in Aberdeenshire.,medium,2023,57143.0
+UK_FLOOD_2024,2024-01-01,2024-12-31,2024 Flooding Events,multiple,800,1200,9000,ABI preliminary estimates,"Multiple events including Storms Henk, Jocelyn. Midlands, East.",low,2024,88889.0

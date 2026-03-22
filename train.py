@@ -178,7 +178,7 @@ def build_hazard_layer(amax_df: pd.DataFrame) -> pd.DataFrame:
             continue
 
         row = {"station_id": sid, "n_years": len(flows)}
-        for T in [10, 50, 100, 200, 500]:
+        for T in [2, 5, 10, 50, 100, 200, 500, 1000]:
             row[f"q_T{T}"] = gev_quantile(T, params["mu"], params["sigma"], params["xi"])
         results.append(row)
 
@@ -233,11 +233,13 @@ def _synthetic_exposure_layer() -> pd.DataFrame:
     """Synthetic exposure for testing."""
     np.random.seed(SIMULATION_SEED + 1)
     n = 5000
+    # Target TIV ~£580bn to calibrate 2007 floods (£3.2bn) at ~T=24 years
+    # E[lognormal(18.4, 0.6)] ≈ exp(18.58) ≈ £117M/postcode * 5000 = £585bn
     return pd.DataFrame({
         "postcode": [f"TEST{i:04d}" for i in range(n)],
         "property_value_gbp": np.random.lognormal(mean=12.3, sigma=0.4, size=n),
         "n_properties": np.random.randint(5, 80, size=n),
-        "total_insured_value_gbp": np.random.lognormal(mean=14.0, sigma=0.6, size=n),
+        "total_insured_value_gbp": np.random.lognormal(mean=18.4, sigma=0.6, size=n),
     })
 
 
@@ -288,33 +290,36 @@ def simulate_event_losses(
     total_tiv = exposure_df["total_insured_value_gbp"].sum()
     print(f"  Total Insured Value: £{total_tiv/1e9:.1f}bn")
 
-    # Simulate events: exponential inter-arrival (Poisson process)
-    event_rates = np.random.exponential(scale=1/50, size=N_STOCHASTIC_EVENTS)  # ~50-year mean
-    event_rates = np.clip(event_rates, 1/1000, 1/2)  # cap between 1-in-2 and 1-in-1000
+    # Build deterministic event catalog: N bins log-uniformly spanning T=2 to T=1000.
+    # Each bin's occurrence rate = 1/T_lower - 1/T_upper (telescoping Poisson rates).
+    # This guarantees the LEC is monotonically decreasing by construction.
+    T_MIN, T_MAX = 2, 1000
+    log_T_edges = np.linspace(np.log(T_MIN), np.log(T_MAX), N_STOCHASTIC_EVENTS + 1)
+    T_edges = np.exp(log_T_edges)
+    T_values = np.sqrt(T_edges[:-1] * T_edges[1:])  # geometric mean of each bin
+    event_rates = 1.0 / T_edges[:-1] - 1.0 / T_edges[1:]  # occurrence rate per year
 
-    # Approximate return period losses using GEV percentile of station flows
+    # Median return period flows from hazard layer
     mean_q_T = {}
-    for T in [10, 50, 100, 200, 500]:
+    for T in [2, 5, 10, 50, 100, 200, 500, 1000]:
         col = f"q_T{T}"
         if col in hazard_df.columns:
             mean_q_T[T] = hazard_df[col].median()
 
-    event_losses = []
-    for rate in event_rates:
-        T = 1 / rate
+    T_known = sorted(mean_q_T.keys())
+    q_known = [mean_q_T[t] for t in T_known]
 
+    event_losses = []
+    for T in T_values:
         # Interpolate flow at this return period
-        T_known = sorted(mean_q_T.keys())
-        q_known = [mean_q_T[t] for t in T_known]
         q_event = float(np.interp(T, T_known, q_known))
 
         # Simple depth-discharge: depth ~ q^0.4 (Manning's law approximation)
-        depth_m = 0.5 * (q_event / 50.0) ** 0.4  # rough normalisation
+        depth_m = 0.5 * (q_event / 50.0) ** 0.4
 
-        # Fraction of portfolio in flood zone at this depth
-        # At 1-in-100 year: ~2% of all properties flooded; at 1-in-10: ~0.5%
-        pct_flooded = 0.001 * (T ** 0.6)  # empirical scaling
-        pct_flooded = min(pct_flooded, 0.15)  # cap at 15%
+        # Fraction of portfolio in flood zone at this return period
+        pct_flooded = 0.001 * (T ** 0.6)
+        pct_flooded = min(pct_flooded, 0.15)
 
         damage_frac = compute_damage_fraction(depth_m)
         loss = total_tiv * pct_flooded * damage_frac * SPATIAL_CORRELATION_FACTOR
