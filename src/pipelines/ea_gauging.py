@@ -23,6 +23,11 @@ BASE_URL = "https://environment.data.gov.uk/flood-monitoring"
 RAW_DIR = Path(__file__).parents[2] / "data" / "raw" / "ea_gauging"
 
 
+def _scalar(v):
+    """Return first element if v is a list, else v as-is."""
+    return v[0] if isinstance(v, list) else v
+
+
 def fetch_all_stations() -> pd.DataFrame:
     """Fetch metadata for all active EA gauging stations in England."""
     print("Fetching all EA gauging stations...")
@@ -39,17 +44,17 @@ def fetch_all_stations() -> pd.DataFrame:
     stations = []
     for s in items:
         stations.append({
-            "station_reference": s.get("stationReference"),
+            "station_reference": _scalar(s.get("stationReference")),
             "station_id": s.get("@id", "").split("/")[-1],
-            "label": s.get("label"),
-            "river_name": s.get("riverName"),
-            "catchment_name": s.get("catchmentName"),
-            "town": s.get("town"),
-            "lat": s.get("lat"),
-            "lon": s.get("long"),
-            "easting": s.get("easting"),
-            "northing": s.get("northing"),
-            "datum": s.get("datum"),
+            "label": _scalar(s.get("label")),
+            "river_name": _scalar(s.get("riverName")),
+            "catchment_name": _scalar(s.get("catchmentName")),
+            "town": _scalar(s.get("town")),
+            "lat": _scalar(s.get("lat")),
+            "lon": _scalar(s.get("long")),
+            "easting": _scalar(s.get("easting")),
+            "northing": _scalar(s.get("northing")),
+            "datum": _scalar(s.get("datum")),
             "stage_scale": s.get("stageScale", {}).get("@id") if isinstance(s.get("stageScale"), dict) else None,
         })
 

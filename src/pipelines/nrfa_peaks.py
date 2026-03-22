@@ -32,33 +32,33 @@ def fetch_station_catalogue() -> pd.DataFrame:
     Returns ~1,500 stations with location, catchment area, and data availability.
     """
     print("Fetching NRFA station catalogue...")
-    url = f"{NRFA_API}/station/list"
+    url = f"{NRFA_API}/station-info"
     params = {
-        "format": "json",
-        "fields": "id,name,river,location,grid-reference,catchment-area,waterbody-id,"
-                  "peak-flow-rejected,pctd-rejected,record-length,gdf-start-date,"
-                  "gdf-end-date,feh-pooling-group,sensitivity",
+        "station": "*",
+        "format": "json-object",
+        "fields": "station-information,gdf-statistics,category",
     }
-    r = requests.get(url, params=params, timeout=30)
+    r = requests.get(url, params=params, timeout=60)
     r.raise_for_status()
     data = r.json()
 
     stations = []
     for s in data.get("data", []):
+        gr = s.get("grid-reference") or {}
         stations.append({
             "station_id": s.get("id"),
             "name": s.get("name"),
             "river": s.get("river"),
             "location": s.get("location"),
-            "grid_ref": s.get("grid-reference", {}).get("ngr") if isinstance(s.get("grid-reference"), dict) else None,
-            "easting": s.get("grid-reference", {}).get("easting") if isinstance(s.get("grid-reference"), dict) else None,
-            "northing": s.get("grid-reference", {}).get("northing") if isinstance(s.get("grid-reference"), dict) else None,
+            "grid_ref": gr.get("ngr"),
+            "easting": gr.get("easting"),
+            "northing": gr.get("northing"),
             "catchment_area_km2": s.get("catchment-area"),
             "record_start": s.get("gdf-start-date"),
             "record_end": s.get("gdf-end-date"),
-            "peak_flow_rejected": s.get("peak-flow-rejected"),
+            "peak_flow_rejected": not s.get("nrfa-peak-flow", True),
             "sensitivity": s.get("sensitivity"),
-            "feh_pooling_group": s.get("feh-pooling-group"),
+            "feh_pooling_group": s.get("feh-pooling"),
         })
 
     df = pd.DataFrame(stations)
@@ -73,9 +73,9 @@ def fetch_amax_series(station_id: int) -> pd.DataFrame:
 
     This is the primary input for GEV distribution fitting.
     """
-    url = f"{NRFA_API}/time-series/data"
+    url = f"{NRFA_API}/time-series"
     params = {
-        "format": "json",
+        "format": "json-object",
         "data-type": "amax-flow",
         "station": station_id,
     }
@@ -84,24 +84,25 @@ def fetch_amax_series(station_id: int) -> pd.DataFrame:
         r.raise_for_status()
         data = r.json()
 
-        values = data.get("data", {}).get("values", [])
-        if not values:
+        stream = data.get("data-stream", [])
+        if not stream:
             return pd.DataFrame()
 
         records = []
-        for entry in values:
+        for i in range(0, len(stream) - 1, 2):
+            date_str = stream[i]
+            flow = stream[i + 1]
             records.append({
                 "station_id": station_id,
-                "water_year": entry[0],
-                "peak_flow_m3s": entry[1],
-                "flag": entry[2] if len(entry) > 2 else None,
+                "water_year": int(str(date_str)[:4]),
+                "peak_flow_m3s": flow,
             })
 
         df = pd.DataFrame(records)
         df["peak_flow_m3s"] = pd.to_numeric(df["peak_flow_m3s"], errors="coerce")
         return df.dropna(subset=["peak_flow_m3s"])
 
-    except Exception as e:
+    except Exception:
         return pd.DataFrame()
 
 
@@ -110,9 +111,9 @@ def fetch_pot_series(station_id: int) -> pd.DataFrame:
     Fetch Peaks Over Threshold (POT) flow series for a station.
     Gives more data points than AMAX — useful for fitting GPD tails.
     """
-    url = f"{NRFA_API}/time-series/data"
+    url = f"{NRFA_API}/time-series"
     params = {
-        "format": "json",
+        "format": "json-object",
         "data-type": "pot-flow",
         "station": station_id,
     }
@@ -121,16 +122,16 @@ def fetch_pot_series(station_id: int) -> pd.DataFrame:
         r.raise_for_status()
         data = r.json()
 
-        values = data.get("data", {}).get("values", [])
-        if not values:
+        stream = data.get("data-stream", [])
+        if not stream:
             return pd.DataFrame()
 
         records = []
-        for entry in values:
+        for i in range(0, len(stream) - 1, 2):
             records.append({
                 "station_id": station_id,
-                "date": entry[0],
-                "peak_flow_m3s": entry[1],
+                "date": stream[i],
+                "peak_flow_m3s": stream[i + 1],
             })
 
         df = pd.DataFrame(records)
@@ -138,7 +139,7 @@ def fetch_pot_series(station_id: int) -> pd.DataFrame:
         df["peak_flow_m3s"] = pd.to_numeric(df["peak_flow_m3s"], errors="coerce")
         return df.dropna(subset=["peak_flow_m3s"])
 
-    except Exception as e:
+    except Exception:
         return pd.DataFrame()
 
 
@@ -148,17 +149,18 @@ def fetch_catchment_descriptors(station_id: int) -> dict:
     These are the physical catchment properties used in regional flood frequency.
     Key descriptors: AREA, SAAR (rainfall), BFIHOST (soil), FARL (lakes), FPEXT (floodplain)
     """
-    url = f"{NRFA_API}/station/info"
+    url = f"{NRFA_API}/station-info"
     params = {
-        "format": "json",
+        "format": "json-object",
         "station": station_id,
-        "fields": "catchment-area,feh-descriptors",
+        "fields": "feh-descriptors",
     }
     try:
         r = requests.get(url, params=params, timeout=10)
         r.raise_for_status()
         data = r.json()
-        descriptors = data.get("data", {}).get("feh-descriptors", {})
+        entries = data.get("data", [])
+        descriptors = entries[0] if entries else {}
         descriptors["station_id"] = station_id
         return descriptors
     except Exception:
