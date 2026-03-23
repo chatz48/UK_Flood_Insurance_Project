@@ -318,8 +318,8 @@ def simulate_event_losses(
         depth_m = 0.5 * (q_event / 50.0) ** 0.4
 
         # Fraction of portfolio in flood zone at this return period
-        # log10(T)^0.6 boosts large-T events; cap at 3% prevents 200yr constraint violation
-        pct_flooded = 0.001 * (T ** 0.6) * (np.log10(T) ** 0.6)
+        # log10(T)^0.7 boosts large-T events; cap at 3% prevents 200yr constraint violation
+        pct_flooded = 0.001 * (T ** 0.6) * (np.log10(T) ** 0.7)
         pct_flooded = min(pct_flooded, 0.03)
 
         damage_frac = compute_damage_fraction(depth_m)
