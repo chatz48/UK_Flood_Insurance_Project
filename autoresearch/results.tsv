@@ -15,3 +15,4 @@ f8569ed	0.2521	keep	log10(T)^0.8 — Cumbria unclipped, 2007 at T=27.1
 ce5d5dd	0.2148	keep	log10(T)^1.0 — 2007 at T=25.1, 2021 unclipped, bias≈0
 discard	0.4498	discard	full NRFA 887 stations — UK median q_T2=37.4 too low (small streams), 50 Scottish better
 discard	0.2789	discard	DAMAGE_DEPTH_OFFSET 0.15→0.0 — worse, removes calibrated depth offset
+a320f43	0.2045	keep	log10(T)^1.1 — log_RMSE 0.1477→0.1356, bias tiny, score improved
