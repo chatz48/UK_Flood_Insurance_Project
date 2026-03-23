@@ -9,3 +9,4 @@ eedbb06	0.4565	keep	spatial correlation 0.93→0.95, tail accuracy improved
 32ffb16	0.3782	keep	pct_flooded *= log10(T)^0.3 — non-linear spatial spread unclips 2019/20
 12858ff	0.3506	keep	log10(T)^0.4 exponent — Carlisle unclipped, 2007 closer
 discard	0.3003	discard	log10(T)^0.6 — 1-in-200=£12.72bn violates constraint
+8ce6bdf	0.3003	keep	log10(T)^0.6 with 3pct cap — 2007 at T=29.6, constraints pass
