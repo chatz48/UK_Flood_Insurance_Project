@@ -21,38 +21,38 @@ Running 10,000 stochastic events...
 LOSS EXCEEDANCE CURVE SUMMARY
 =======================================================
 
-Annual Average Loss (AAL):          £2,776m
-TVaR (99.5% / 1-in-200 year):       £1,822m
+Annual Average Loss (AAL):          £3,552m
+TVaR (99.5% / 1-in-200 year):       £2,331m
 
 Return Period Losses:
-  1-in-2     year:  £  16,816m
-  1-in-5     year:  £  16,816m
-  1-in-10    year:  £  16,816m
-  1-in-20    year:  £  16,816m
-  1-in-50    year:  £  16,816m
-  1-in-100   year:  £  16,816m
-  1-in-200   year:  £  16,816m
-  1-in-500   year:  £  16,816m
-  1-in-1000  year:  £  16,816m
+  1-in-2     year:  £  21,516m
+  1-in-5     year:  £  21,516m
+  1-in-10    year:  £  21,516m
+  1-in-20    year:  £  21,516m
+  1-in-50    year:  £  21,516m
+  1-in-100   year:  £  21,516m
+  1-in-200   year:  £  21,516m
+  1-in-500   year:  £  21,516m
+  1-in-1000  year:  £  21,516m
 
 Validation against known UK flood events:
                                              event  year  observed_loss_gbpm  implied_return_period_modelled confidence
-                                2007 Summer Floods  2007                3200                            77.7       high
-                                2000 Autumn Floods  2000                1300                            17.8     medium
-Winter 2015/16 Floods (Storms Desmond, Eva, Frank)  2015                1300                            17.8       high
-                             2013/14 Winter Floods  2013                1100                            13.5       high
-                         2012 Summer/Autumn Floods  2012                 600                             5.2     medium
-                             2019/20 Winter Floods  2019                 360                             2.4       high
+                                2007 Summer Floods  2007                3200                            51.4       high
+                                2000 Autumn Floods  2000                1300                            11.9     medium
+Winter 2015/16 Floods (Storms Desmond, Eva, Frank)  2015                1300                            11.9       high
+                             2013/14 Winter Floods  2013                1100                             9.1       high
+                         2012 Summer/Autumn Floods  2012                 600                             3.6     medium
+                             2019/20 Winter Floods  2019                 360                             2.0       high
                               Carlisle Floods 2005  2005                 272                             2.0       high
                                   Storm Babet 2023  2023                 200                             2.0     medium
                                Cumbria Floods 2009  2009                 174                             2.0       high
                               2021 Summer Flooding  2021                 140                             2.0     medium
                              Boscastle Flash Flood  2004                  15                             2.0       high
 
-Model score (lower=better): 0.8307
-  Log-RMSE:       0.5197
-  Bias:           0.1454
-  Tail accuracy:  0.7944
+Model score (lower=better): 0.5102
+  Log-RMSE:       0.3593
+  Bias:           -0.0314
+  Tail accuracy:  0.4505
 =======================================================
 
-val_score: 0.8307
+val_score: 0.5102

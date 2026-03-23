@@ -68,8 +68,8 @@ MIN_RECORD_YEARS = 15                # minimum years of record to include a stat
 # --- Vulnerability Layer ---
 DAMAGE_FUNCTION = "defra_fd2320"    # options: "defra_fd2320", "exponential", "sigmoid", "piecewise"
 DAMAGE_DEPTH_OFFSET = 0.0           # shift applied to flood depth before damage calc (metres)
-CONTAMINATION_RATE = 0.35           # fraction of flood events with sewage contamination
-MEAN_FLOOD_DURATION_DAYS = 2.0      # average flood duration for duration adjustment
+CONTAMINATION_RATE = 0.50           # fraction of flood events with sewage contamination
+MEAN_FLOOD_DURATION_DAYS = 3.5      # average flood duration for duration adjustment
 
 # Exponential curve params (used if DAMAGE_FUNCTION="exponential")
 EXP_K = 0.8
@@ -86,7 +86,7 @@ PROPERTY_VALUE_INFLATION = 1.15     # price-to-rebuild-cost ratio (rebuild usual
 DEFAULT_PROPERTY_VALUE_GBP = 220000 # fallback where Land Registry data is missing
 
 # --- Loss Aggregation ---
-SPATIAL_CORRELATION_FACTOR = 0.85  # correlation between adjacent postcode losses (0=independent, 1=perfect)
+SPATIAL_CORRELATION_FACTOR = 0.93  # correlation between adjacent postcode losses (0=independent, 1=perfect)
 CATCHMENT_AGGREGATION = "sum"       # how to sum losses across a catchment: "sum" or "loss_weighted_sum"
 
 # --- Simulation ---
