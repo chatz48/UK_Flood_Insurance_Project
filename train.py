@@ -318,7 +318,8 @@ def simulate_event_losses(
         depth_m = 0.5 * (q_event / 50.0) ** 0.4
 
         # Fraction of portfolio in flood zone at this return period
-        pct_flooded = 0.001 * (T ** 0.6)
+        # log10(T)^0.3 factor: suppresses small-T events, boosts large-T non-linearly
+        pct_flooded = 0.001 * (T ** 0.6) * (np.log10(T) ** 0.3)
         pct_flooded = min(pct_flooded, 0.15)
 
         damage_frac = compute_damage_fraction(depth_m)
