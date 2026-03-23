@@ -67,7 +67,7 @@ MIN_RECORD_YEARS = 15                # minimum years of record to include a stat
 
 # --- Vulnerability Layer ---
 DAMAGE_FUNCTION = "defra_fd2320"    # options: "defra_fd2320", "exponential", "sigmoid", "piecewise"
-DAMAGE_DEPTH_OFFSET = 0.0           # shift applied to flood depth before damage calc (metres)
+DAMAGE_DEPTH_OFFSET = 0.15          # shift applied to flood depth before damage calc (metres)
 CONTAMINATION_RATE = 0.50           # fraction of flood events with sewage contamination
 MEAN_FLOOD_DURATION_DAYS = 3.5      # average flood duration for duration adjustment
 
