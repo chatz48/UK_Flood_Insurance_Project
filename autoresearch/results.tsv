@@ -18,3 +18,4 @@ discard	0.2789	discard	DAMAGE_DEPTH_OFFSET 0.15→0.0 — worse, removes calibra
 a320f43	0.2045	keep	log10(T)^1.1 — log_RMSE 0.1477→0.1356, bias tiny, score improved
 discard	0.2128	discard	log10(T)^1.2 — bias increased 0.0123→0.0249, worse than ^1.1
 discard	0.2604	discard	coefficient 0.001→0.0012 — large negative bias -0.09, overestimates losses
+discard	0.2118	discard	T^0.65 — tail improved but negative bias dominates
