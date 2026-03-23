@@ -1,2 +1,3 @@
 commit	val_score	status	description
 4c5862e	6.6282	keep	baseline — pipeline fixes, quick NRFA (50 stations)
+1a781ca	0.5102	keep	tune vulnerability + spatial correlation

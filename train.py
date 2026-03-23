@@ -61,7 +61,7 @@ RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 # ===========================================================================
 
 # --- Hazard Layer ---
-HAZARD_FITTING_METHOD = "gev_lmom"   # options: "gev_lmom", "gev_mle", "gumbel_lmom"
+HAZARD_FITTING_METHOD = "gev_mle"    # options: "gev_lmom", "gev_mle", "gumbel_lmom"
 AMAX_REGIONAL_POOLING = False        # pool stations within same FEH region for better tail estimation
 MIN_RECORD_YEARS = 15                # minimum years of record to include a station
 
