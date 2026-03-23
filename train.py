@@ -86,7 +86,7 @@ PROPERTY_VALUE_INFLATION = 1.15     # price-to-rebuild-cost ratio (rebuild usual
 DEFAULT_PROPERTY_VALUE_GBP = 220000 # fallback where Land Registry data is missing
 
 # --- Loss Aggregation ---
-SPATIAL_CORRELATION_FACTOR = 0.93  # correlation between adjacent postcode losses (0=independent, 1=perfect)
+SPATIAL_CORRELATION_FACTOR = 0.95  # correlation between adjacent postcode losses (0=independent, 1=perfect)
 CATCHMENT_AGGREGATION = "sum"       # how to sum losses across a catchment: "sum" or "loss_weighted_sum"
 
 # --- Simulation ---

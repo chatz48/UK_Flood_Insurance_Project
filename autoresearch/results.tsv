@@ -2,3 +2,6 @@ commit	val_score	status	description
 4c5862e	6.6282	keep	baseline — pipeline fixes, quick NRFA (50 stations)
 1a781ca	0.5102	keep	tune vulnerability + spatial correlation
 discard	0.5072	discard	MIN_RECORD_YEARS 15→10 adds noise, worse
+113c32c	0.4620	keep	damage depth offset +0.15m, tail accuracy improved
+discard	0.4620	discard	50k events same as 10k, simplicity criterion
+discard	0.4621	discard	depth 0.20 + contamination 0.45 + duration 4.0 - no improvement
