@@ -20,3 +20,4 @@ discard	0.2128	discard	log10(T)^1.2 — bias increased 0.0123→0.0249, worse th
 discard	0.2604	discard	coefficient 0.001→0.0012 — large negative bias -0.09, overestimates losses
 discard	0.2118	discard	T^0.65 — tail improved but negative bias dominates
 discard	0.2803	discard	sigmoid damage — default params overestimate loss, bias -0.10
+discard	0.2185	discard	contamination 0.50→0.40 — all components worse, bias +0.02
