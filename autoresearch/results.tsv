@@ -13,3 +13,4 @@ discard	0.3003	discard	log10(T)^0.6 — 1-in-200=£12.72bn violates constraint
 7364b9a	0.2750	keep	log10(T)^0.7 — 2012 perfect, Babet unclipped, min=£183m
 f8569ed	0.2521	keep	log10(T)^0.8 — Cumbria unclipped, 2007 at T=27.1
 ce5d5dd	0.2148	keep	log10(T)^1.0 — 2007 at T=25.1, 2021 unclipped, bias≈0
+discard	0.4498	discard	full NRFA 887 stations — UK median q_T2=37.4 too low (small streams), 50 Scottish better
