@@ -11,3 +11,4 @@ eedbb06	0.4565	keep	spatial correlation 0.93→0.95, tail accuracy improved
 discard	0.3003	discard	log10(T)^0.6 — 1-in-200=£12.72bn violates constraint
 8ce6bdf	0.3003	keep	log10(T)^0.6 with 3pct cap — 2007 at T=29.6, constraints pass
 7364b9a	0.2750	keep	log10(T)^0.7 — 2012 perfect, Babet unclipped, min=£183m
+f8569ed	0.2521	keep	log10(T)^0.8 — Cumbria unclipped, 2007 at T=27.1
