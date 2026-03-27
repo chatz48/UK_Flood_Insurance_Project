@@ -100,13 +100,13 @@ FEATURE_CATALOGUE = {
     },
 
     "postcode_deprivation": {
-        "description": "Index of Multiple Deprivation — correlates with property age/quality/flood resilience",
+        "description": "IMD 2019 deprivation — property age/quality/flood resilience proxy",
         "join_key": "postcode",
         "path": "deprivation_features.parquet",
-        "columns": ["postcode", "imd_decile", "housing_deprivation_score", "living_env_score"],
+        "columns": ["postcode", "imd_decile", "income_deprivation_score", "living_env_score"],
         "source": "MHCLG — gov.uk/government/statistics/english-indices-of-deprivation-2019",
         "status": "candidate",
-        "fetch_notes": "Direct CSV download. Postcode-level IMD scores freely available.",
+        "fetch_notes": "Run: python src/pipelines/postcode_deprivation.py",
     },
 
     "insurance_market_penetration": {
