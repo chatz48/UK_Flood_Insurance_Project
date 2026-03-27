@@ -145,26 +145,50 @@ def fetch_pot_series(station_id: int) -> pd.DataFrame:
 
 def fetch_catchment_descriptors(station_id: int) -> dict:
     """
-    Fetch FEH (Flood Estimation Handbook) catchment descriptors.
-    These are the physical catchment properties used in regional flood frequency.
-    Key descriptors: AREA, SAAR (rainfall), BFIHOST (soil), FARL (lakes), FPEXT (floodplain)
+    Fetch FEH catchment descriptors for a station from the NRFA API.
+
+    Uses json-object format with station-information + feh-descriptors fields.
+    Fields are returned flat (not nested) in the API response.
+
+    Available fields via this API:
+      catchment-area → area (km²)
+      bfihost        → base flow index from HOST soils
+      farl           → flood attenuation by reservoirs and lakes (0–1)
+      propwet        → proportion of time soils are wet (proxy for saar/wetness)
+
+    Note: saar and urbext2000 are not directly available via the public NRFA API.
+    These can be supplemented from the FEH Web Service (fee-based) or the
+    UK Digital River Network.
     """
     url = f"{NRFA_API}/station-info"
     params = {
-        "format": "json-object",
         "station": station_id,
-        "fields": "feh-descriptors",
+        "format": "json-object",
+        "fields": "station-information,feh-descriptors",
     }
     try:
         r = requests.get(url, params=params, timeout=10)
         r.raise_for_status()
         data = r.json()
+
         entries = data.get("data", [])
-        descriptors = entries[0] if entries else {}
-        descriptors["station_id"] = station_id
-        return descriptors
+        entry = entries[0] if entries else {}
+
+        return {
+            "station_id": station_id,
+            "area": entry.get("catchment-area"),
+            "farl": entry.get("farl"),
+            "bfihost": entry.get("bfihost"),
+            "propwet": entry.get("propwet"),  # soil wetness proxy
+            "saar": None,        # not available via public API
+            "urbext2000": None,  # not available via public API
+        }
     except Exception:
-        return {"station_id": station_id}
+        return {
+            "station_id": station_id,
+            "area": None, "farl": None, "bfihost": None,
+            "propwet": None, "saar": None, "urbext2000": None,
+        }
 
 
 def run_full_pipeline(
