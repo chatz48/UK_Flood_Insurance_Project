@@ -61,7 +61,7 @@ Run: `python train.py` — prints `val_score` on the last line (lower is better)
 
 ## Current Limitations
 
-**Data gaps (most impactful first):**
+**Data gaps:**
 
 - **EA Flood Zone polygons** — The statutory Flood Map for Planning (Zones 2/3a/3b) is unavailable via API; the EA ArcGIS REST endpoints are down. Without this, every property defaults to flood zone "none" and the spatial loss allocation is missing. Manual download from [data.gov.uk](https://www.data.gov.uk/dataset/2a6f4a16-31c7-4cf2-a843-ec80bc7e88af) required.
 - **Property counts** — Land Registry `transaction_count` counts *transactions*, not *properties*. This inflates portfolio TIV (currently ~£2,160bn vs realistic ~£400–600bn for residential England). Replacing with VOA council tax stock counts per postcode would fix this.
@@ -77,7 +77,7 @@ Run: `python train.py` — prints `val_score` on the last line (lower is better)
 
 ---
 
-## What Would Materially Improve the Model
+## What Would Improve the Model
 
 1. **EA Flood Zone 2/3 polygons** — single biggest gap; unlocks property-level flood zone assignment
 2. **OS Terrain 50 DEM** — enables depth estimation from hydraulic flood levels rather than zone-based proxies
