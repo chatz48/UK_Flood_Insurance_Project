@@ -13,11 +13,24 @@ Hazard → Exposure → Vulnerability → Loss Aggregation
 ```
 
 - **Hazard** — GEV distributions fitted to NRFA annual maximum flows for ~880 gauging stations, giving return period flows at T=2 through T=1000 years
-- **Exposure** — Land Registry price paid data geocoded to lat/lon, with EA flood zone assignment and property value aggregation by postcode
+- **Exposure** — ~5M Land Registry transactions geocoded to lat/lon via postcodes.io, with EA flood zone assignment and property value aggregation by postcode
 - **Vulnerability** — DEFRA FD2320 residential depth-damage curve with adjustments for contamination and flood duration
 - **Loss** — 10,000 stochastic Monte Carlo events producing a full LEC, AAL, and TVaR (99.5%)
 
 There's also a Thames RDS scenario benchmarked against the Lloyd's £6.2bn industry loss figure, climate-adjusted AALs under UKCP18 RCP8.5, and a TIV accumulation table by flood zone and county.
+
+---
+
+## Current model state
+
+| Item | Status |
+|---|---|
+| Exposure portfolio | Built — 4,992,742 transactions geocoded across ~1.08M postcodes |
+| Hazard layer | 777 stations fitted (GEV MLE, QMED > 5 m³/s filter) |
+| Feature parquets | NRFA AMAX, Land Registry, Council Tax built |
+| EA flood zone assignment | **Not working** — EA ArcGIS API down, all properties default to zone "none" |
+| Deprivation features | LSOA-level data available; postcode join pending ONS lookup |
+| val_score | 0.9667 (lower is better) |
 
 ---
 
@@ -36,7 +49,7 @@ All data is publicly available and free. The pipeline scripts download and cache
 | ABI / DEFRA flood events | 13 observed events for model validation |
 | NFIP Claims (FEMA) | US claims data used as damage function calibration reference |
 
-**Note on EA flood zones:** the EA ArcGIS REST API for the statutory flood zone boundaries is currently returning errors. This needs a manual download from [data.gov.uk](https://www.data.gov.uk/dataset/2a6f4a16-31c7-4cf2-a843-ec80bc7e88af) and placing the file at `data/raw/ea_flood_zones/rofrs_zones_by_region.parquet`. Without it, properties default to flood zone "none" and the spatial loss allocation is effectively disabled.
+**Note on EA flood zones:** the EA ArcGIS REST API for the statutory flood zone boundaries is currently returning errors. This needs a manual download from [data.gov.uk](https://www.data.gov.uk/dataset/2a6f4a16-31c7-4cf2-a843-ec80bc7e88af) and placing the file at `data/raw/ea_flood_zones/rofrs_zones_by_region.parquet`. Without it, properties default to flood zone "none" and the spatial loss allocation is effectively disabled — this is the single biggest gap in the model right now.
 
 ---
 
@@ -48,7 +61,7 @@ pip install -r requirements.txt
 # Download all data (cached, re-runnable)
 python run_pipelines.py
 
-# Build geocoded exposure portfolio (~20 min, parallel)
+# Build geocoded exposure portfolio (~20 min, parallel geocoding)
 python src/exposure/portfolio.py
 
 # Run model — prints val_score on last line
@@ -72,11 +85,13 @@ python train.py
 
 1. **EA flood zone polygons** — without these, there's no spatial loss allocation. Everything is modelled at portfolio level rather than property level. Getting the RoFRS shapefile is the single highest-impact improvement.
 
-2. **TIV is inflated** — I'm using Land Registry `transaction_count` as a proxy for property count, which overcounts. The realistic residential TIV for England should be around £400–600bn; the model currently produces ~£2,160bn. The fix is to use VOA council tax stock counts as the property count denominator.
+2. **TIV is inflated** — I'm using Land Registry transactions as a proxy for property count, which overcounts. The portfolio currently holds ~£2,380bn TIV across 5M transactions; realistic residential TIV for England is around £400–600bn. The fix is to use VOA council tax stock counts as the property count denominator rather than transaction count.
 
 3. **No DEM** — flood depth is estimated from a simplified Manning's-law approximation rather than actual elevation data. OS Terrain 50 is free under PSGA and would substantially improve depth estimation.
 
-4. **Spatial correlation** — a single scalar factor is used across the whole portfolio. Proper event footprints (flood extent polygons per event) are needed for realistic tail loss behaviour.
+4. **Flat LEC at high return periods** — the percentage-of-portfolio-flooded formula caps at around T=85 years, so T=100/200/500 losses are currently identical. This is a calibration issue in `train.py` that needs fixing once flood zone assignment is working.
+
+5. **Spatial correlation** — a single scalar factor is used across the whole portfolio. Proper event footprints (flood extent polygons per event) are needed for realistic tail loss behaviour.
 
 **On methodology:**
 
