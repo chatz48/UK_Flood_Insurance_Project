@@ -90,7 +90,8 @@ def compute_aal(lec_df: pd.DataFrame) -> float:
     losses_sorted = losses[order]
     probs_sorted = lec_df["exceedance_prob"].values[order]
 
-    aal = np.trapz(probs_sorted[::-1], losses_sorted)
+    trapz = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
+    aal = trapz(probs_sorted[::-1], losses_sorted)
     return float(aal)
 
 
