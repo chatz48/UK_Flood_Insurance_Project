@@ -25,6 +25,7 @@ import requests
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Ensure project root is on the path when run directly
 PROJECT_ROOT = Path(__file__).parents[2]
@@ -38,7 +39,7 @@ CHECKPOINT_DIR = PROCESSED_DIR / "portfolio_checkpoints"
 TIV_INFLATION_FACTOR = 1.25  # transaction price → rebuild cost
 POSTCODES_IO_URL = "https://api.postcodes.io/postcodes"
 POSTCODES_IO_BATCH_SIZE = 100
-POSTCODES_IO_SLEEP = 0.5  # seconds between batches (rate limit)
+POSTCODES_IO_WORKERS = 10  # parallel threads for geocoding
 
 PROPERTY_TYPE_MAP = {
     "D": "detached", "S": "semi", "T": "terraced", "F": "flat", "O": "other",
@@ -131,47 +132,44 @@ def geocode_postcodes(postcodes: list) -> pd.DataFrame:
     CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
     results = []
     n_batches = (len(remaining) + POSTCODES_IO_BATCH_SIZE - 1) // POSTCODES_IO_BATCH_SIZE
+    batches = [remaining[i:i + POSTCODES_IO_BATCH_SIZE] for i in range(0, len(remaining), POSTCODES_IO_BATCH_SIZE)]
 
-    print(f"  Geocoding {len(remaining):,} postcodes in {n_batches} batches...")
-    for i in range(0, len(remaining), POSTCODES_IO_BATCH_SIZE):
-        batch = remaining[i:i + POSTCODES_IO_BATCH_SIZE]
-        batch_num = i // POSTCODES_IO_BATCH_SIZE + 1
+    print(f"  Geocoding {len(remaining):,} postcodes in {n_batches} batches ({POSTCODES_IO_WORKERS} workers)...")
 
-        if batch_num % 50 == 0:
-            print(f"    Batch {batch_num}/{n_batches}")
-
+    def _fetch_batch(args):
+        batch_num, batch = args
         try:
-            r = requests.post(
-                POSTCODES_IO_URL,
-                json={"postcodes": batch},
-                timeout=30,
-            )
+            r = requests.post(POSTCODES_IO_URL, json={"postcodes": batch}, timeout=30)
             r.raise_for_status()
-            data = r.json()
-
-            for item in data.get("result", []):
-                query = item.get("query", "")
-                result = item.get("result")
-                if result:
-                    results.append({
-                        "postcode": query,
-                        "lat": result.get("latitude"),
-                        "lon": result.get("longitude"),
-                        "lsoa_code": result.get("codes", {}).get("lsoa"),
-                        "district": result.get("admin_district"),
-                        "county": result.get("admin_county"),
+            rows = []
+            for item in r.json().get("result", []):
+                res = item.get("result")
+                if res:
+                    rows.append({
+                        "postcode": item.get("query", ""),
+                        "lat": res.get("latitude"),
+                        "lon": res.get("longitude"),
+                        "lsoa_code": res.get("codes", {}).get("lsoa"),
+                        "district": res.get("admin_district"),
+                        "county": res.get("admin_county"),
                     })
+            return batch_num, rows
         except Exception as e:
-            print(f"    Warning: batch {batch_num} failed: {e}")
+            return batch_num, []
 
-        time.sleep(POSTCODES_IO_SLEEP)
-
-        # Save checkpoint every 200 batches
-        if batch_num % 200 == 0 and results:
-            interim = pd.DataFrame(results)
-            if not cached.empty:
-                interim = pd.concat([cached, interim], ignore_index=True)
-            interim.to_parquet(checkpoint_path, index=False)
+    completed = 0
+    with ThreadPoolExecutor(max_workers=POSTCODES_IO_WORKERS) as pool:
+        futures = {pool.submit(_fetch_batch, (i + 1, b)): i for i, b in enumerate(batches)}
+        for future in as_completed(futures):
+            batch_num, rows = future.result()
+            results.extend(rows)
+            completed += 1
+            if completed % 200 == 0:
+                print(f"    {completed}/{n_batches} batches ({completed * POSTCODES_IO_BATCH_SIZE:,} postcodes)")
+                interim = pd.DataFrame(results)
+                if not cached.empty:
+                    interim = pd.concat([cached, interim], ignore_index=True)
+                interim.to_parquet(checkpoint_path, index=False)
 
     new_geo = pd.DataFrame(results) if results else pd.DataFrame()
     if not cached.empty and not new_geo.empty:
