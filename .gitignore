@@ -26,3 +26,6 @@ notebooks/.ipynb_checkpoints/
 
 # OS
 .DS_Store
+
+# EDA
+data_readiness_and_eda_latest_changes.ipynb
