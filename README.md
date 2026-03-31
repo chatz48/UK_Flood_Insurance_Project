@@ -50,7 +50,6 @@ Recent additions include:
 
 ---
 
-## Current model state
 
 | Item | Status |
 |---|---|
@@ -64,9 +63,7 @@ Recent additions include:
 
 ---
 
-## Data
 
-All data is publicly available and free. The pipeline scripts download and cache everything automatically.
 
 | Source | Used for |
 |---|---|
