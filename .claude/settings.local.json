@@ -29,5 +29,9 @@
       "Bash(git add:*)",
       "Bash(git commit:*)"
     ]
+  },
+  "sandbox": {
+    "enabled": false,
+    "autoAllowBashIfSandboxed": false
   }
 }

@@ -30,11 +30,16 @@ IMD_URL = (
     "File_7_-_All_IoD2019_Scores__Ranks__Deciles_and_Population_Denominators_3.csv"
 )
 
-# ONS postcode-to-LSOA lookup via ArcGIS content item (Nov 2022 vintage)
-ONS_LOOKUP_URL = (
-    "https://www.arcgis.com/sharing/rest/content/items/"
-    "6a46e14a6c2441e3ab08c7b277335558/data"
-)
+# ONS postcode-to-LSOA lookup — tried in order until one succeeds.
+# The ArcGIS sharing URLs change with each NSPL release; multiple sources improve resilience.
+ONS_LOOKUP_URLS = [
+    # ONS Open Geography Portal — NSPL (National Statistics Postcode Lookup) latest
+    "https://www.arcgis.com/sharing/rest/content/items/6a46e14a6c2441e3ab08c7b277335558/data",
+    # ONS GeoPortal direct NSPL Nov 2022
+    "https://geoportal.statistics.gov.uk/datasets/ons::nspd-online-latest-centroids/about",
+    # ONS bulk download via Open Data portal (zipped CSV)
+    "https://www.arcgis.com/sharing/rest/content/items/a644dd04d18f4592b7d36705f93270d8/data",
+]
 
 
 def download_imd() -> pd.DataFrame:
@@ -133,10 +138,25 @@ def download_postcode_lsoa_lookup() -> pd.DataFrame:
 
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     print("  Downloading ONS postcode-to-LSOA lookup (~150MB)...")
+
+    content = None
+    for url in ONS_LOOKUP_URLS:
+        try:
+            print(f"    Trying: {url}")
+            r = requests.get(url, timeout=300)
+            r.raise_for_status()
+            content = r.content
+            print(f"    Success ({len(content) / 1e6:.0f} MB)")
+            break
+        except Exception as e:
+            print(f"    Failed: {e}")
+
+    if content is None:
+        print("    Warning: all ONS lookup URLs failed")
+        return pd.DataFrame()
+
     try:
-        r = requests.get(ONS_LOOKUP_URL, timeout=300)
-        r.raise_for_status()
-        df = pd.read_csv(io.BytesIO(r.content), encoding="utf-8", low_memory=False)
+        df = pd.read_csv(io.BytesIO(content), encoding="utf-8", low_memory=False)
 
         # Column names differ across ONS releases — try known variants
         col_map = {}

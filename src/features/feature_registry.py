@@ -130,13 +130,13 @@ FEATURE_CATALOGUE = {
     },
 
     "historic_flood_claims_hull": {
-        "description": "Hull 2007 flood event — detailed property-level damage survey",
+        "description": "Hull 2007 flood event — EA open data, property-level flood depths and damage",
         "join_key": "postcode",
         "path": "hull_2007_features.parquet",
         "columns": ["postcode", "pct_properties_flooded", "mean_depth_m", "mean_damage_fraction"],
-        "source": "Hull City Council / EA — 2007 flood event study",
-        "status": "candidate",
-        "fetch_notes": "PDF report: search 'Hull flood 2007 damage assessment'. Extract tables manually.",
+        "source": "Environment Agency Open Data — environment.data.gov.uk/dataset/02cb6781-582f-49d3-9e1d-6f6ad933465d",
+        "status": "active",
+        "fetch_notes": "Run: python src/pipelines/hull_2007.py — uses EA CKAN API to discover download URLs automatically.",
     },
 
     "noaa_hurdat2": {

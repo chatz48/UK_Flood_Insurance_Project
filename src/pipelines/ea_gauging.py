@@ -13,6 +13,8 @@ Data collected:
 """
 
 import requests
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 import json
 import time
@@ -173,21 +175,27 @@ def run_full_pipeline(
     warnings_df.to_parquet(warnings_path, index=False)
     print(f"  Saved warnings to {warnings_path}")
 
-    # 3. Optional: pull historical readings for each station
+    # 3. Optional: pull historical readings for each station — parallel fetch
     if fetch_readings:
         stations_to_fetch = stations_df.head(max_stations) if max_stations else stations_df
-        print(f"\nFetching historical readings for {len(stations_to_fetch)} stations...")
-        print("  This will take a while — ~1 request per station with rate limiting")
+        refs = [r for r in stations_to_fetch["station_reference"].tolist() if r]
+        print(f"\nFetching historical readings for {len(refs)} stations (parallel)...")
+
+        _sem = threading.Semaphore(10)  # EA monitoring API: be polite
+
+        def _fetch_with_limit(ref):
+            with _sem:
+                df = fetch_historical_readings(ref, readings_start, readings_end)
+                time.sleep(0.1)
+                return df
 
         all_readings = []
-        for _, row in tqdm(stations_to_fetch.iterrows(), total=len(stations_to_fetch)):
-            ref = row["station_reference"]
-            if not ref:
-                continue
-            df = fetch_historical_readings(ref, readings_start, readings_end)
-            if not df.empty:
-                all_readings.append(df)
-            time.sleep(0.2)  # respect EA rate limits
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            futures = [pool.submit(_fetch_with_limit, ref) for ref in refs]
+            for future in tqdm(as_completed(futures), total=len(futures)):
+                df = future.result()
+                if not df.empty:
+                    all_readings.append(df)
 
         if all_readings:
             readings_df = pd.concat(all_readings, ignore_index=True)

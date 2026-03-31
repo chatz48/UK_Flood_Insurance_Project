@@ -19,11 +19,26 @@ import requests
 import pandas as pd
 import json
 import time
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from tqdm import tqdm
 
 NRFA_API = "https://nrfaapps.ceh.ac.uk/nrfa/ws"
 RAW_DIR = Path(__file__).parents[2] / "data" / "raw" / "nrfa"
+
+# Rate-limit: max concurrent requests to NRFA API.
+# NRFA docs say the service is "experimental" — be polite.
+_NRFA_WORKERS = 20
+_nrfa_semaphore = threading.Semaphore(_NRFA_WORKERS)
+
+
+def _get(url: str, params: dict, timeout: int = 15) -> requests.Response:
+    """Rate-limited GET wrapper for NRFA API calls."""
+    with _nrfa_semaphore:
+        r = requests.get(url, params=params, timeout=timeout)
+        time.sleep(0.05)  # 50ms per slot — polite but fast
+        return r
 
 
 def fetch_station_catalogue() -> pd.DataFrame:
@@ -38,7 +53,7 @@ def fetch_station_catalogue() -> pd.DataFrame:
         "format": "json-object",
         "fields": "station-information,gdf-statistics,category",
     }
-    r = requests.get(url, params=params, timeout=60)
+    r = _get(url, params=params, timeout=60)
     r.raise_for_status()
     data = r.json()
 
@@ -80,7 +95,7 @@ def fetch_amax_series(station_id: int) -> pd.DataFrame:
         "station": station_id,
     }
     try:
-        r = requests.get(url, params=params, timeout=15)
+        r = _get(url, params=params, timeout=15)
         r.raise_for_status()
         data = r.json()
 
@@ -118,7 +133,7 @@ def fetch_pot_series(station_id: int) -> pd.DataFrame:
         "station": station_id,
     }
     try:
-        r = requests.get(url, params=params, timeout=15)
+        r = _get(url, params=params, timeout=15)
         r.raise_for_status()
         data = r.json()
 
@@ -167,7 +182,7 @@ def fetch_catchment_descriptors(station_id: int) -> dict:
         "fields": "station-information,feh-descriptors",
     }
     try:
-        r = requests.get(url, params=params, timeout=10)
+        r = _get(url, params=params, timeout=10)
         r.raise_for_status()
         data = r.json()
 
@@ -231,16 +246,18 @@ def run_full_pipeline(
     if max_stations:
         usable = usable.head(max_stations)
 
-    print(f"\nFetching AMAX series for {len(usable)} stations (>= {min_record_years} years record)...")
+    station_ids = [int(row["station_id"]) for _, row in usable.iterrows()]
+    print(f"\nFetching AMAX series for {len(station_ids)} stations "
+          f"(>= {min_record_years} years record, {_NRFA_WORKERS} parallel workers)...")
 
-    # 2. AMAX series — one file per station, plus combined
+    # 2. AMAX series — parallel fetch
     all_amax = []
-    for _, row in tqdm(usable.iterrows(), total=len(usable)):
-        sid = int(row["station_id"])
-        df = fetch_amax_series(sid)
-        if not df.empty:
-            all_amax.append(df)
-        time.sleep(0.1)
+    with ThreadPoolExecutor(max_workers=_NRFA_WORKERS) as pool:
+        futures = {pool.submit(fetch_amax_series, sid): sid for sid in station_ids}
+        for future in tqdm(as_completed(futures), total=len(futures)):
+            df = future.result()
+            if not df.empty:
+                all_amax.append(df)
 
     if all_amax:
         amax_df = pd.concat(all_amax, ignore_index=True)
@@ -248,16 +265,16 @@ def run_full_pipeline(
         amax_df.to_parquet(amax_path, index=False)
         print(f"  Saved {len(amax_df):,} AMAX records ({amax_df['station_id'].nunique()} stations) to {amax_path}")
 
-    # 3. POT series
+    # 3. POT series — parallel fetch
     if fetch_pot:
-        print(f"\nFetching POT series...")
+        print(f"\nFetching POT series ({_NRFA_WORKERS} workers)...")
         all_pot = []
-        for _, row in tqdm(usable.iterrows(), total=len(usable)):
-            sid = int(row["station_id"])
-            df = fetch_pot_series(sid)
-            if not df.empty:
-                all_pot.append(df)
-            time.sleep(0.1)
+        with ThreadPoolExecutor(max_workers=_NRFA_WORKERS) as pool:
+            futures = {pool.submit(fetch_pot_series, sid): sid for sid in station_ids}
+            for future in tqdm(as_completed(futures), total=len(futures)):
+                df = future.result()
+                if not df.empty:
+                    all_pot.append(df)
 
         if all_pot:
             pot_df = pd.concat(all_pot, ignore_index=True)
@@ -265,15 +282,14 @@ def run_full_pipeline(
             pot_df.to_parquet(pot_path, index=False)
             print(f"  Saved {len(pot_df):,} POT records to {pot_path}")
 
-    # 4. Catchment descriptors
+    # 4. Catchment descriptors — parallel fetch
     if fetch_descriptors:
-        print(f"\nFetching FEH catchment descriptors...")
+        print(f"\nFetching FEH catchment descriptors ({_NRFA_WORKERS} workers)...")
         descriptors = []
-        for _, row in tqdm(usable.iterrows(), total=len(usable)):
-            sid = int(row["station_id"])
-            d = fetch_catchment_descriptors(sid)
-            descriptors.append(d)
-            time.sleep(0.1)
+        with ThreadPoolExecutor(max_workers=_NRFA_WORKERS) as pool:
+            futures = {pool.submit(fetch_catchment_descriptors, sid): sid for sid in station_ids}
+            for future in tqdm(as_completed(futures), total=len(futures)):
+                descriptors.append(future.result())
 
         desc_df = pd.DataFrame(descriptors)
         desc_path = RAW_DIR / "catchment_descriptors.parquet"
