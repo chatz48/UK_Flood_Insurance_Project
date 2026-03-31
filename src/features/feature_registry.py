@@ -100,13 +100,13 @@ FEATURE_CATALOGUE = {
     },
 
     "postcode_deprivation": {
-        "description": "Index of Multiple Deprivation — correlates with property age/quality/flood resilience",
+        "description": "IMD 2019 deprivation — property age/quality/flood resilience proxy",
         "join_key": "postcode",
         "path": "deprivation_features.parquet",
-        "columns": ["postcode", "imd_decile", "housing_deprivation_score", "living_env_score"],
+        "columns": ["postcode", "imd_decile", "income_deprivation_score", "living_env_score"],
         "source": "MHCLG — gov.uk/government/statistics/english-indices-of-deprivation-2019",
         "status": "candidate",
-        "fetch_notes": "Direct CSV download. Postcode-level IMD scores freely available.",
+        "fetch_notes": "Run: python src/pipelines/postcode_deprivation.py",
     },
 
     "insurance_market_penetration": {
@@ -130,13 +130,13 @@ FEATURE_CATALOGUE = {
     },
 
     "historic_flood_claims_hull": {
-        "description": "Hull 2007 flood event — detailed property-level damage survey",
+        "description": "Hull 2007 flood event — EA open data, property-level flood depths and damage",
         "join_key": "postcode",
         "path": "hull_2007_features.parquet",
         "columns": ["postcode", "pct_properties_flooded", "mean_depth_m", "mean_damage_fraction"],
-        "source": "Hull City Council / EA — 2007 flood event study",
-        "status": "candidate",
-        "fetch_notes": "PDF report: search 'Hull flood 2007 damage assessment'. Extract tables manually.",
+        "source": "Environment Agency Open Data — environment.data.gov.uk/dataset/02cb6781-582f-49d3-9e1d-6f6ad933465d",
+        "status": "active",
+        "fetch_notes": "Run: python src/pipelines/hull_2007.py — uses EA CKAN API to discover download URLs automatically.",
     },
 
     "noaa_hurdat2": {

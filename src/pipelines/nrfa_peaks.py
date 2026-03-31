@@ -19,11 +19,26 @@ import requests
 import pandas as pd
 import json
 import time
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from tqdm import tqdm
 
 NRFA_API = "https://nrfaapps.ceh.ac.uk/nrfa/ws"
 RAW_DIR = Path(__file__).parents[2] / "data" / "raw" / "nrfa"
+
+# Rate-limit: max concurrent requests to NRFA API.
+# NRFA docs say the service is "experimental" — be polite.
+_NRFA_WORKERS = 20
+_nrfa_semaphore = threading.Semaphore(_NRFA_WORKERS)
+
+
+def _get(url: str, params: dict, timeout: int = 15) -> requests.Response:
+    """Rate-limited GET wrapper for NRFA API calls."""
+    with _nrfa_semaphore:
+        r = requests.get(url, params=params, timeout=timeout)
+        time.sleep(0.05)  # 50ms per slot — polite but fast
+        return r
 
 
 def fetch_station_catalogue() -> pd.DataFrame:
@@ -32,33 +47,33 @@ def fetch_station_catalogue() -> pd.DataFrame:
     Returns ~1,500 stations with location, catchment area, and data availability.
     """
     print("Fetching NRFA station catalogue...")
-    url = f"{NRFA_API}/station/list"
+    url = f"{NRFA_API}/station-info"
     params = {
-        "format": "json",
-        "fields": "id,name,river,location,grid-reference,catchment-area,waterbody-id,"
-                  "peak-flow-rejected,pctd-rejected,record-length,gdf-start-date,"
-                  "gdf-end-date,feh-pooling-group,sensitivity",
+        "station": "*",
+        "format": "json-object",
+        "fields": "station-information,gdf-statistics,category",
     }
-    r = requests.get(url, params=params, timeout=30)
+    r = _get(url, params=params, timeout=60)
     r.raise_for_status()
     data = r.json()
 
     stations = []
     for s in data.get("data", []):
+        gr = s.get("grid-reference") or {}
         stations.append({
             "station_id": s.get("id"),
             "name": s.get("name"),
             "river": s.get("river"),
             "location": s.get("location"),
-            "grid_ref": s.get("grid-reference", {}).get("ngr") if isinstance(s.get("grid-reference"), dict) else None,
-            "easting": s.get("grid-reference", {}).get("easting") if isinstance(s.get("grid-reference"), dict) else None,
-            "northing": s.get("grid-reference", {}).get("northing") if isinstance(s.get("grid-reference"), dict) else None,
+            "grid_ref": gr.get("ngr"),
+            "easting": gr.get("easting"),
+            "northing": gr.get("northing"),
             "catchment_area_km2": s.get("catchment-area"),
             "record_start": s.get("gdf-start-date"),
             "record_end": s.get("gdf-end-date"),
-            "peak_flow_rejected": s.get("peak-flow-rejected"),
+            "peak_flow_rejected": not s.get("nrfa-peak-flow", True),
             "sensitivity": s.get("sensitivity"),
-            "feh_pooling_group": s.get("feh-pooling-group"),
+            "feh_pooling_group": s.get("feh-pooling"),
         })
 
     df = pd.DataFrame(stations)
@@ -73,35 +88,36 @@ def fetch_amax_series(station_id: int) -> pd.DataFrame:
 
     This is the primary input for GEV distribution fitting.
     """
-    url = f"{NRFA_API}/time-series/data"
+    url = f"{NRFA_API}/time-series"
     params = {
-        "format": "json",
+        "format": "json-object",
         "data-type": "amax-flow",
         "station": station_id,
     }
     try:
-        r = requests.get(url, params=params, timeout=15)
+        r = _get(url, params=params, timeout=15)
         r.raise_for_status()
         data = r.json()
 
-        values = data.get("data", {}).get("values", [])
-        if not values:
+        stream = data.get("data-stream", [])
+        if not stream:
             return pd.DataFrame()
 
         records = []
-        for entry in values:
+        for i in range(0, len(stream) - 1, 2):
+            date_str = stream[i]
+            flow = stream[i + 1]
             records.append({
                 "station_id": station_id,
-                "water_year": entry[0],
-                "peak_flow_m3s": entry[1],
-                "flag": entry[2] if len(entry) > 2 else None,
+                "water_year": int(str(date_str)[:4]),
+                "peak_flow_m3s": flow,
             })
 
         df = pd.DataFrame(records)
         df["peak_flow_m3s"] = pd.to_numeric(df["peak_flow_m3s"], errors="coerce")
         return df.dropna(subset=["peak_flow_m3s"])
 
-    except Exception as e:
+    except Exception:
         return pd.DataFrame()
 
 
@@ -110,27 +126,27 @@ def fetch_pot_series(station_id: int) -> pd.DataFrame:
     Fetch Peaks Over Threshold (POT) flow series for a station.
     Gives more data points than AMAX — useful for fitting GPD tails.
     """
-    url = f"{NRFA_API}/time-series/data"
+    url = f"{NRFA_API}/time-series"
     params = {
-        "format": "json",
+        "format": "json-object",
         "data-type": "pot-flow",
         "station": station_id,
     }
     try:
-        r = requests.get(url, params=params, timeout=15)
+        r = _get(url, params=params, timeout=15)
         r.raise_for_status()
         data = r.json()
 
-        values = data.get("data", {}).get("values", [])
-        if not values:
+        stream = data.get("data-stream", [])
+        if not stream:
             return pd.DataFrame()
 
         records = []
-        for entry in values:
+        for i in range(0, len(stream) - 1, 2):
             records.append({
                 "station_id": station_id,
-                "date": entry[0],
-                "peak_flow_m3s": entry[1],
+                "date": stream[i],
+                "peak_flow_m3s": stream[i + 1],
             })
 
         df = pd.DataFrame(records)
@@ -138,31 +154,56 @@ def fetch_pot_series(station_id: int) -> pd.DataFrame:
         df["peak_flow_m3s"] = pd.to_numeric(df["peak_flow_m3s"], errors="coerce")
         return df.dropna(subset=["peak_flow_m3s"])
 
-    except Exception as e:
+    except Exception:
         return pd.DataFrame()
 
 
 def fetch_catchment_descriptors(station_id: int) -> dict:
     """
-    Fetch FEH (Flood Estimation Handbook) catchment descriptors.
-    These are the physical catchment properties used in regional flood frequency.
-    Key descriptors: AREA, SAAR (rainfall), BFIHOST (soil), FARL (lakes), FPEXT (floodplain)
+    Fetch FEH catchment descriptors for a station from the NRFA API.
+
+    Uses json-object format with station-information + feh-descriptors fields.
+    Fields are returned flat (not nested) in the API response.
+
+    Available fields via this API:
+      catchment-area → area (km²)
+      bfihost        → base flow index from HOST soils
+      farl           → flood attenuation by reservoirs and lakes (0–1)
+      propwet        → proportion of time soils are wet (proxy for saar/wetness)
+
+    Note: saar and urbext2000 are not directly available via the public NRFA API.
+    These can be supplemented from the FEH Web Service (fee-based) or the
+    UK Digital River Network.
     """
-    url = f"{NRFA_API}/station/info"
+    url = f"{NRFA_API}/station-info"
     params = {
-        "format": "json",
         "station": station_id,
-        "fields": "catchment-area,feh-descriptors",
+        "format": "json-object",
+        "fields": "station-information,feh-descriptors",
     }
     try:
-        r = requests.get(url, params=params, timeout=10)
+        r = _get(url, params=params, timeout=10)
         r.raise_for_status()
         data = r.json()
-        descriptors = data.get("data", {}).get("feh-descriptors", {})
-        descriptors["station_id"] = station_id
-        return descriptors
+
+        entries = data.get("data", [])
+        entry = entries[0] if entries else {}
+
+        return {
+            "station_id": station_id,
+            "area": entry.get("catchment-area"),
+            "farl": entry.get("farl"),
+            "bfihost": entry.get("bfihost"),
+            "propwet": entry.get("propwet"),  # soil wetness proxy
+            "saar": None,        # not available via public API
+            "urbext2000": None,  # not available via public API
+        }
     except Exception:
-        return {"station_id": station_id}
+        return {
+            "station_id": station_id,
+            "area": None, "farl": None, "bfihost": None,
+            "propwet": None, "saar": None, "urbext2000": None,
+        }
 
 
 def run_full_pipeline(
@@ -205,16 +246,18 @@ def run_full_pipeline(
     if max_stations:
         usable = usable.head(max_stations)
 
-    print(f"\nFetching AMAX series for {len(usable)} stations (>= {min_record_years} years record)...")
+    station_ids = [int(row["station_id"]) for _, row in usable.iterrows()]
+    print(f"\nFetching AMAX series for {len(station_ids)} stations "
+          f"(>= {min_record_years} years record, {_NRFA_WORKERS} parallel workers)...")
 
-    # 2. AMAX series — one file per station, plus combined
+    # 2. AMAX series — parallel fetch
     all_amax = []
-    for _, row in tqdm(usable.iterrows(), total=len(usable)):
-        sid = int(row["station_id"])
-        df = fetch_amax_series(sid)
-        if not df.empty:
-            all_amax.append(df)
-        time.sleep(0.1)
+    with ThreadPoolExecutor(max_workers=_NRFA_WORKERS) as pool:
+        futures = {pool.submit(fetch_amax_series, sid): sid for sid in station_ids}
+        for future in tqdm(as_completed(futures), total=len(futures)):
+            df = future.result()
+            if not df.empty:
+                all_amax.append(df)
 
     if all_amax:
         amax_df = pd.concat(all_amax, ignore_index=True)
@@ -222,16 +265,16 @@ def run_full_pipeline(
         amax_df.to_parquet(amax_path, index=False)
         print(f"  Saved {len(amax_df):,} AMAX records ({amax_df['station_id'].nunique()} stations) to {amax_path}")
 
-    # 3. POT series
+    # 3. POT series — parallel fetch
     if fetch_pot:
-        print(f"\nFetching POT series...")
+        print(f"\nFetching POT series ({_NRFA_WORKERS} workers)...")
         all_pot = []
-        for _, row in tqdm(usable.iterrows(), total=len(usable)):
-            sid = int(row["station_id"])
-            df = fetch_pot_series(sid)
-            if not df.empty:
-                all_pot.append(df)
-            time.sleep(0.1)
+        with ThreadPoolExecutor(max_workers=_NRFA_WORKERS) as pool:
+            futures = {pool.submit(fetch_pot_series, sid): sid for sid in station_ids}
+            for future in tqdm(as_completed(futures), total=len(futures)):
+                df = future.result()
+                if not df.empty:
+                    all_pot.append(df)
 
         if all_pot:
             pot_df = pd.concat(all_pot, ignore_index=True)
@@ -239,15 +282,14 @@ def run_full_pipeline(
             pot_df.to_parquet(pot_path, index=False)
             print(f"  Saved {len(pot_df):,} POT records to {pot_path}")
 
-    # 4. Catchment descriptors
+    # 4. Catchment descriptors — parallel fetch
     if fetch_descriptors:
-        print(f"\nFetching FEH catchment descriptors...")
+        print(f"\nFetching FEH catchment descriptors ({_NRFA_WORKERS} workers)...")
         descriptors = []
-        for _, row in tqdm(usable.iterrows(), total=len(usable)):
-            sid = int(row["station_id"])
-            d = fetch_catchment_descriptors(sid)
-            descriptors.append(d)
-            time.sleep(0.1)
+        with ThreadPoolExecutor(max_workers=_NRFA_WORKERS) as pool:
+            futures = {pool.submit(fetch_catchment_descriptors, sid): sid for sid in station_ids}
+            for future in tqdm(as_completed(futures), total=len(futures)):
+                descriptors.append(future.result())
 
         desc_df = pd.DataFrame(descriptors)
         desc_path = RAW_DIR / "catchment_descriptors.parquet"

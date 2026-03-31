@@ -1,0 +1,24 @@
+commit	val_score	status	description
+4c5862e	6.6282	keep	baseline — pipeline fixes, quick NRFA (50 stations)
+1a781ca	0.5102	keep	tune vulnerability + spatial correlation
+discard	0.5072	discard	MIN_RECORD_YEARS 15→10 adds noise, worse
+113c32c	0.4620	keep	damage depth offset +0.15m, tail accuracy improved
+discard	0.4620	discard	50k events same as 10k, simplicity criterion
+discard	0.4621	discard	depth 0.20 + contamination 0.45 + duration 4.0 - no improvement
+eedbb06	0.4565	keep	spatial correlation 0.93→0.95, tail accuracy improved
+32ffb16	0.3782	keep	pct_flooded *= log10(T)^0.3 — non-linear spatial spread unclips 2019/20
+12858ff	0.3506	keep	log10(T)^0.4 exponent — Carlisle unclipped, 2007 closer
+discard	0.3003	discard	log10(T)^0.6 — 1-in-200=£12.72bn violates constraint
+8ce6bdf	0.3003	keep	log10(T)^0.6 with 3pct cap — 2007 at T=29.6, constraints pass
+7364b9a	0.2750	keep	log10(T)^0.7 — 2012 perfect, Babet unclipped, min=£183m
+f8569ed	0.2521	keep	log10(T)^0.8 — Cumbria unclipped, 2007 at T=27.1
+ce5d5dd	0.2148	keep	log10(T)^1.0 — 2007 at T=25.1, 2021 unclipped, bias≈0
+discard	0.4498	discard	full NRFA 887 stations — UK median q_T2=37.4 too low (small streams), 50 Scottish better
+discard	0.2789	discard	DAMAGE_DEPTH_OFFSET 0.15→0.0 — worse, removes calibrated depth offset
+a320f43	0.2045	keep	log10(T)^1.1 — log_RMSE 0.1477→0.1356, bias tiny, score improved
+discard	0.2128	discard	log10(T)^1.2 — bias increased 0.0123→0.0249, worse than ^1.1
+discard	0.2604	discard	coefficient 0.001→0.0012 — large negative bias -0.09, overestimates losses
+discard	0.2118	discard	T^0.65 — tail improved but negative bias dominates
+discard	0.2803	discard	sigmoid damage — default params overestimate loss, bias -0.10
+discard	0.2185	discard	contamination 0.50→0.40 — all components worse, bias +0.02
+discard	0.2130	discard	gev_lmom — log_RMSE 0.1356→0.1448 worse despite FEH standard

@@ -202,19 +202,38 @@ UK_FLOOD_EVENTS = [
         "notes": "Scotland and East Midlands. Record river levels in Aberdeenshire.",
         "confidence": "medium",
     },
-    # 2024 flooding events
+    # 2024 flooding events — revised down from £800m preliminary to £585m confirmed
+    # ABI adverse weather statistics 2024: £585m weather-related property damage
+    # (ABI press release Feb 2025: "adverse weather pushes property insurance payouts")
     {
         "event_id": "UK_FLOOD_2024",
         "start_date": "2024-01-01",
         "end_date": "2024-12-31",
         "name": "2024 Flooding Events",
         "type": "multiple",
-        "insured_loss_gbp_m": 800,
-        "economic_loss_gbp_m": 1200,
-        "properties_flooded": 9000,
-        "source": "ABI preliminary estimates",
-        "notes": "Multiple events including Storms Henk, Jocelyn. Midlands, East.",
-        "confidence": "low",
+        "insured_loss_gbp_m": 585,
+        "economic_loss_gbp_m": 900,
+        "properties_flooded": 7000,
+        "source": "ABI adverse weather statistics 2024 (confirmed)",
+        "notes": "Multiple events including Storms Henk, Jocelyn. Midlands, East. "
+                 "Revised from £800m preliminary to £585m ABI confirmed weather figure.",
+        "confidence": "medium",
+    },
+    # 2025 — domestic flood claims spike, Q1 alone record-breaking
+    # ABI: domestic flood claims 2025 = £312m (38% YoY increase); avg payout £30k
+    {
+        "event_id": "UK_FLOOD_2025",
+        "start_date": "2025-01-01",
+        "end_date": "2025-12-31",
+        "name": "2025 Flooding Events",
+        "type": "multiple",
+        "insured_loss_gbp_m": 312,
+        "economic_loss_gbp_m": 480,
+        "properties_flooded": 10400,
+        "source": "ABI Q1 2025 property claims statistics",
+        "notes": "Q1 2025 highest quarterly weather claims on record (£226m). "
+                 "Domestic flood claims £312m annual, avg payout £30k per homeowner.",
+        "confidence": "medium",
     },
 ]
 

@@ -1,6 +1,6 @@
 """
 Environment Agency Flood Zone Shapefiles
-Downloads Flood Zones 1, 2, 3a and 3b for England.
+Downloads Flood Zones 2 and 3 for England via the EA WFS service.
 
 Flood Zone definitions (direct insurance relevance):
   Zone 1: < 0.1% annual probability (low risk)   — no loading
@@ -8,201 +8,243 @@ Flood Zone definitions (direct insurance relevance):
   Zone 3a: > 1.0% annual probability (high)       — significant loading / exclusion
   Zone 3b: Functional floodplain                  — typically excluded
 
-Also downloads:
-  - Risk of Flooding from Rivers and Sea (RoFRS) — 5m grid, 4 risk bands
-  - Historic Flood Outlines — recorded flood extents since records began
-  - Flood Warning Areas — zones that receive EA alerts
-  - Surface Water Flood Maps (SWFM) — pluvial flooding at 3 return periods
+Data source (2025+):
+  The old individual Zone 2 / Zone 3 datasets on data.gov.uk were deprecated
+  and removed in April 2025. The consolidated "Flood Map for Planning" dataset
+  is now the authoritative source, accessible via WFS:
+    Zone 2: https://environment.data.gov.uk/spatialdata/flood-map-for-planning-rivers-and-sea-flood-zone-2/wfs
+    Zone 3: https://environment.data.gov.uk/spatialdata/flood-map-for-planning-rivers-and-sea-flood-zone-3/wfs
 
-Data portal: https://www.data.gov.uk/dataset/flood-risk-zones
-EA GeoServer: https://environment.data.gov.uk/arcgis/rest/services
+  The EA Real-Time Flood Monitoring API for flood warning areas remains operational:
+    https://environment.data.gov.uk/flood-monitoring/id/floodAreas
 """
 
 import requests
 import geopandas as gpd
 import pandas as pd
 from pathlib import Path
-import zipfile
 import io
 import time
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 RAW_DIR = Path(__file__).parents[2] / "data" / "raw" / "ea_flood_zones"
 
-# EA ArcGIS REST API endpoints
-EA_ARCGIS = "https://environment.data.gov.uk/arcgis/rest/services"
-
-# WFS endpoints for vector data
-EA_WFS = "https://environment.data.gov.uk/spatialdata"
-
-# Direct download URLs for national flood zone datasets
-FLOOD_ZONE_DOWNLOADS = {
-    # Risk of Flooding from Rivers and Sea — 4-band risk, 5m resolution
-    "rofrs_england": "https://services.arcgis.com/JJzESW51TqeY9uat/arcgis/rest/services/Risk_of_Flooding_from_Rivers_and_Sea/FeatureServer/0/query",
-
-    # Flood Warning Areas
-    "flood_warning_areas": "https://environment.data.gov.uk/spatialdata/flood-warning-areas/wfs",
+# EA WFS endpoints — consolidated Flood Map for Planning (post-April 2025)
+EA_WFS = {
+    "zone_2": "https://environment.data.gov.uk/spatialdata/flood-map-for-planning-rivers-and-sea-flood-zone-2/wfs",
+    "zone_3": "https://environment.data.gov.uk/spatialdata/flood-map-for-planning-rivers-and-sea-flood-zone-3/wfs",
 }
 
-# EA Open Data download page for shapefiles
-EA_OPEN_DATA = {
-    "flood_zones_3": "https://www.data.gov.uk/dataset/cf494c44-05ba-4324-abb7-a35c3bd7c3ef/flood-zone-3",
-    "flood_zones_2_3": "https://www.data.gov.uk/dataset/3c7c7296-0cf2-4d8d-9e0f-5d4e2d0df97d/flood-risk-zones-england",
-}
+# EA Flood Monitoring API for flood warning areas
+EA_MONITORING_API = "https://environment.data.gov.uk/flood-monitoring"
+
+# WFS page size — EA WFS returns up to 1000 features per request
+WFS_PAGE_SIZE = 1000
+
+# Parallel workers for polygon downloads
+_POLYGON_WORKERS = 15
+_polygon_semaphore = threading.Semaphore(_POLYGON_WORKERS)
 
 
-def fetch_rofrs_by_region(region_bbox: tuple, output_name: str) -> gpd.GeoDataFrame:
+def _wfs_get_feature_count(wfs_url: str, layer_name: str) -> int:
+    """Return total feature count for a WFS layer (used for pagination)."""
+    params = {
+        "SERVICE": "WFS",
+        "REQUEST": "GetFeature",
+        "TYPENAMES": layer_name,
+        "resultType": "hits",
+        "outputFormat": "application/json",
+    }
+    try:
+        r = requests.get(wfs_url, params=params, timeout=30)
+        r.raise_for_status()
+        return r.json().get("totalFeatures", 0)
+    except Exception as e:
+        print(f"  Warning: could not get feature count: {e}")
+        return 0
+
+
+def _fetch_wfs_page(wfs_url: str, layer_name: str, start_index: int) -> list:
+    """Fetch one page of WFS features as GeoJSON feature list."""
+    params = {
+        "SERVICE": "WFS",
+        "REQUEST": "GetFeature",
+        "TYPENAMES": layer_name,
+        "outputFormat": "application/json",
+        "count": WFS_PAGE_SIZE,
+        "startIndex": start_index,
+    }
+    with _polygon_semaphore:
+        try:
+            r = requests.get(wfs_url, params=params, timeout=60)
+            r.raise_for_status()
+            return r.json().get("features", [])
+        except Exception as e:
+            print(f"  Warning: WFS page at offset {start_index} failed: {e}")
+            return []
+
+
+def fetch_flood_zone_wfs(zone_key: str, max_features: int = 50000) -> gpd.GeoDataFrame:
     """
-    Fetch Risk of Flooding from Rivers and Sea for a bounding box.
+    Download an EA flood zone layer via WFS, paginating until complete.
 
     Args:
-        region_bbox: (min_lon, min_lat, max_lon, max_lat) in WGS84
-        output_name: label for this region
+        zone_key: "zone_2" or "zone_3"
+        max_features: cap total features (large datasets can be 500k+ polygons)
 
-    Risk bands returned:
-        1 = High (>3.3% annual chance)
-        2 = Medium (1–3.3%)
-        3 = Low (0.1–1%)
-        4 = Very Low (<0.1%)
+    Returns GeoDataFrame with flood zone polygons, or empty GeoDataFrame on failure.
     """
-    url = f"{EA_ARCGIS}/EA/FloodMapForPlanning/MapServer/0/query"
-    params = {
-        "where": "1=1",
-        "geometry": f"{region_bbox[0]},{region_bbox[1]},{region_bbox[2]},{region_bbox[3]}",
-        "geometryType": "esriGeometryEnvelope",
-        "inSR": "4326",
-        "spatialRel": "esriSpatialRelIntersects",
-        "outFields": "*",
-        "returnGeometry": "true",
-        "f": "geojson",
-        "resultRecordCount": 2000,
-    }
+    wfs_url = EA_WFS[zone_key]
+    print(f"  Fetching {zone_key} via WFS: {wfs_url}")
+
+    # Discover the layer name from GetCapabilities
     try:
-        r = requests.get(url, params=params, timeout=60)
-        r.raise_for_status()
-        gdf = gpd.read_file(io.StringIO(r.text))
-        print(f"  Fetched {len(gdf)} flood zone features for {output_name}")
-        return gdf
+        cap_r = requests.get(
+            wfs_url,
+            params={"SERVICE": "WFS", "REQUEST": "GetCapabilities"},
+            timeout=30,
+        )
+        cap_r.raise_for_status()
+        # Layer name is typically the first FeatureType Name in the XML
+        import re
+        names = re.findall(r"<Name>(.*?)</Name>", cap_r.text)
+        layer_name = names[0] if names else zone_key
+        print(f"    Layer name: {layer_name}")
     except Exception as e:
-        print(f"  Warning: failed to fetch RoFRS for {output_name}: {e}")
+        print(f"  Warning: GetCapabilities failed ({e}), using default layer name")
+        layer_name = zone_key
+
+    total = _wfs_get_feature_count(wfs_url, layer_name)
+    if total == 0:
+        print(f"  Warning: no features found for {zone_key}")
         return gpd.GeoDataFrame()
 
+    total = min(total, max_features)
+    print(f"    {total:,} features to fetch ({(total // WFS_PAGE_SIZE) + 1} pages)...")
 
-def fetch_flood_warning_areas() -> gpd.GeoDataFrame:
-    """
-    Fetch all EA Flood Warning Areas (polygons).
-    These are the zones the EA sends alerts to — ~24k areas across England.
-    Each area has a river/coastal identifier and alert history.
-    """
-    print("Fetching Flood Warning Areas...")
-    url = f"{EA_ARCGIS}/Environment_Agency/Flood_Warning_Areas/FeatureServer/0/query"
-    params = {
-        "where": "1=1",
-        "outFields": "FWS_TACODE,DESCRIP,QDIAL,RIVER_SEA,LA_NAME,COUNTY",
-        "returnGeometry": "true",
-        "f": "geojson",
-        "resultRecordCount": 5000,
-    }
-    try:
-        r = requests.get(url, params=params, timeout=60)
-        r.raise_for_status()
-        gdf = gpd.read_file(io.StringIO(r.text))
-        print(f"  Fetched {len(gdf)} flood warning areas")
-        return gdf
-    except Exception as e:
-        print(f"  Warning: {e}")
+    # Parallel page fetches
+    offsets = list(range(0, total, WFS_PAGE_SIZE))
+    all_features = []
+
+    with ThreadPoolExecutor(max_workers=_POLYGON_WORKERS) as pool:
+        futures = {
+            pool.submit(_fetch_wfs_page, wfs_url, layer_name, offset): offset
+            for offset in offsets
+        }
+        for future in as_completed(futures):
+            all_features.extend(future.result())
+
+    if not all_features:
         return gpd.GeoDataFrame()
 
+    import json as _json
+    fc = {"type": "FeatureCollection", "features": all_features}
+    gdf = gpd.read_file(io.StringIO(_json.dumps(fc)))
+    print(f"    Fetched {len(gdf):,} {zone_key} polygons")
+    return gdf
 
-def fetch_historic_flood_outlines() -> gpd.GeoDataFrame:
+
+def fetch_flood_warning_areas(max_areas: int = 5000) -> gpd.GeoDataFrame:
     """
-    Fetch Historic Flood Map — recorded flood extents since records began.
-    Includes river, coastal and groundwater flooding events.
-    Each polygon has an event date and source type.
-    Used to validate the hazard model against observed inundation.
+    Fetch EA Flood Warning Areas via the EA Real-Time Flood Monitoring API.
+
+    Downloads polygon GeoJSON for each area in parallel.
+    These are flood alert zones — a practical proxy for fluvial flood risk
+    and usable immediately without any API issues.
     """
-    print("Fetching Historic Flood Outlines...")
-    url = f"{EA_ARCGIS}/Environment_Agency/Historic_Flood_Map/FeatureServer/0/query"
-    params = {
-        "where": "1=1",
-        "outFields": "EVENT_DATE,FLOOD_SOURCE,COUNTY,REGION",
-        "returnGeometry": "true",
-        "f": "geojson",
-        "resultRecordCount": 5000,
-    }
-    try:
-        r = requests.get(url, params=params, timeout=60)
-        r.raise_for_status()
-        gdf = gpd.read_file(io.StringIO(r.text))
-        print(f"  Fetched {len(gdf)} historic flood outlines")
-        return gdf
-    except Exception as e:
-        print(f"  Warning: {e}")
+    print(f"Fetching Flood Warning Areas (up to {max_areas})...")
+    api_url = f"{EA_MONITORING_API}/id/floodAreas"
+
+    # Collect all area metadata with pagination
+    areas = []
+    offset = 0
+    batch = 500
+    while offset < max_areas:
+        try:
+            r = requests.get(api_url, params={"_limit": batch, "_offset": offset}, timeout=30)
+            r.raise_for_status()
+            items = r.json().get("items", [])
+            if not items:
+                break
+            areas.extend(items)
+            offset += batch
+            if len(areas) >= max_areas:
+                break
+        except Exception as e:
+            print(f"  Warning: metadata batch at offset {offset} failed: {e}")
+            break
+
+    areas = [a for a in areas if a.get("polygon")]
+    print(f"  {len(areas)} areas with polygon URLs — fetching in parallel...")
+
+    def _fetch_polygon(item: dict) -> list:
+        with _polygon_semaphore:
+            try:
+                rp = requests.get(item["polygon"], timeout=15,
+                                  headers={"Accept": "application/json"})
+                if rp.status_code != 200:
+                    return []
+                feats = rp.json().get("features", [])
+                for f in feats:
+                    f["properties"].update({
+                        "fwdCode": item.get("notation", ""),
+                        "label": item.get("label", ""),
+                        "county": item.get("county", ""),
+                        "riverOrSea": item.get("riverOrSea", ""),
+                    })
+                return feats
+            except Exception:
+                return []
+
+    all_features = []
+    with ThreadPoolExecutor(max_workers=_POLYGON_WORKERS) as pool:
+        futures = [pool.submit(_fetch_polygon, a) for a in areas]
+        for i, future in enumerate(as_completed(futures)):
+            all_features.extend(future.result())
+            if (i + 1) % 500 == 0:
+                print(f"  ... {i + 1}/{len(areas)} polygons done")
+
+    if not all_features:
+        print("  No flood warning area polygons retrieved")
         return gpd.GeoDataFrame()
 
-
-# Major UK cities bounding boxes for regional downloads
-UK_REGIONS = {
-    "yorkshire":       (-2.5, 53.3, -0.5, 54.2),
-    "midlands":        (-2.5, 52.0, -0.5, 53.0),
-    "london_thames":   (-0.6, 51.3,  0.3, 51.7),
-    "south_west":      (-5.5, 49.9, -2.0, 51.5),
-    "north_east":      (-2.5, 54.5, -0.5, 55.5),
-    "east_anglia":     ( 0.0, 51.5,  2.0, 53.0),
-    "north_west":      (-3.5, 53.2, -1.8, 54.0),
-    "wales":           (-5.3, 51.3, -2.6, 53.5),
-}
+    import json as _json
+    gdf = gpd.read_file(io.StringIO(_json.dumps(
+        {"type": "FeatureCollection", "features": all_features}
+    )))
+    print(f"  Fetched {len(gdf):,} flood warning area polygons")
+    return gdf
 
 
-def run_full_pipeline():
+def run_full_pipeline(
+    fetch_zones: bool = True,
+    fetch_warning_areas: bool = True,
+    max_zone_features: int = 50000,
+    max_warning_areas: int = 5000,
+):
     """
-    Download all EA flood spatial datasets.
-    Note: Full national flood zone shapefiles require EA Data Services registration.
-    This pipeline pulls what's freely available via REST API.
+    Download EA flood spatial datasets.
+
+    fetch_zones: Download Flood Zone 2 and 3 polygons via WFS (large, slow)
+    fetch_warning_areas: Download flood alert area polygons (faster, good proxy)
     """
     RAW_DIR.mkdir(parents=True, exist_ok=True)
 
-    # 1. Flood warning areas (national, one request)
-    warnings_gdf = fetch_flood_warning_areas()
-    if not warnings_gdf.empty:
-        path = RAW_DIR / "flood_warning_areas.parquet"
-        warnings_gdf.to_parquet(path, index=False)
-        print(f"  Saved to {path}")
+    if fetch_warning_areas:
+        warnings_gdf = fetch_flood_warning_areas(max_areas=max_warning_areas)
+        if not warnings_gdf.empty:
+            path = RAW_DIR / "flood_warning_areas.parquet"
+            warnings_gdf.to_parquet(path, index=False)
+            print(f"  Saved {len(warnings_gdf):,} flood warning areas → {path}")
 
-    # 2. Historic flood outlines
-    historic_gdf = fetch_historic_flood_outlines()
-    if not historic_gdf.empty:
-        path = RAW_DIR / "historic_flood_outlines.parquet"
-        historic_gdf.to_parquet(path, index=False)
-        print(f"  Saved to {path}")
-
-    # 3. Risk zones by region (API has record limits, so we tile by region)
-    print("\nFetching RoFRS flood zones by region...")
-    all_zones = []
-    for region_name, bbox in UK_REGIONS.items():
-        gdf = fetch_rofrs_by_region(bbox, region_name)
-        if not gdf.empty:
-            gdf["region"] = region_name
-            all_zones.append(gdf)
-        time.sleep(1.0)
-
-    if all_zones:
-        combined = pd.concat(all_zones, ignore_index=True)
-        path = RAW_DIR / "rofrs_zones_by_region.parquet"
-        combined.to_parquet(path, index=False)
-        print(f"  Saved {len(combined)} zone features to {path}")
-
-    # 4. Print instructions for full national shapefiles
-    print("\n" + "="*60)
-    print("MANUAL DOWNLOAD REQUIRED for full national flood zones:")
-    print("="*60)
-    print("1. Flood Zone 3 shapefile:")
-    print("   https://www.data.gov.uk/dataset/cf494c44-05ba-4324-abb7-a35c3bd7c3ef")
-    print("\n2. Flood Risk Zones 2 & 3 (detailed):")
-    print("   https://www.data.gov.uk/dataset/3c7c7296-0cf2-4d8d-9e0f-5d4e2d0df97d")
-    print("\n3. Risk of Flooding from Rivers and Sea (RoFRS) full raster:")
-    print("   https://environment.data.gov.uk/dataset/b5b5b5b5-..." )
-    print("\nPlace downloaded shapefiles in:", RAW_DIR / "manual_downloads")
-    print("="*60)
+    if fetch_zones:
+        for zone_key in ("zone_2", "zone_3"):
+            gdf = fetch_flood_zone_wfs(zone_key, max_features=max_zone_features)
+            if not gdf.empty:
+                path = RAW_DIR / f"flood_{zone_key}.parquet"
+                gdf.to_parquet(path, index=False)
+                print(f"  Saved {len(gdf):,} {zone_key} polygons → {path}")
 
     print("\nEA Flood Zones pipeline complete.")
 

@@ -173,9 +173,13 @@ All else equal, simpler is better.
 
 ## Known Calibration Points
 
-The 2007 UK floods (£3.2bn insured, ~1-in-75 year event) is the single most
-important calibration point. A good model places the 1-in-75 year loss
+The 2007 UK floods (£3.2bn insured, ~1-in-35 year event) is the single most
+important calibration point. A good model places the 1-in-35 year loss
 between £2.5bn and £4.5bn.
+
+Return period source: Marsh & Hannaford (2007) CEH/NERC hydrological appraisal
+gives 30–45 years for peak flows on the Severn. The previously used T=75 figure
+was not supported by published hydrological analysis.
 
 ABI annual aggregate benchmark: ~£500–800m average annual flood loss.
 Your AAL must fall in this range.

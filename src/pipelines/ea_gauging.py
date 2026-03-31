@@ -13,6 +13,8 @@ Data collected:
 """
 
 import requests
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 import json
 import time
@@ -21,6 +23,11 @@ from tqdm import tqdm
 
 BASE_URL = "https://environment.data.gov.uk/flood-monitoring"
 RAW_DIR = Path(__file__).parents[2] / "data" / "raw" / "ea_gauging"
+
+
+def _scalar(v):
+    """Return first element if v is a list, else v as-is."""
+    return v[0] if isinstance(v, list) else v
 
 
 def fetch_all_stations() -> pd.DataFrame:
@@ -39,17 +46,17 @@ def fetch_all_stations() -> pd.DataFrame:
     stations = []
     for s in items:
         stations.append({
-            "station_reference": s.get("stationReference"),
+            "station_reference": _scalar(s.get("stationReference")),
             "station_id": s.get("@id", "").split("/")[-1],
-            "label": s.get("label"),
-            "river_name": s.get("riverName"),
-            "catchment_name": s.get("catchmentName"),
-            "town": s.get("town"),
-            "lat": s.get("lat"),
-            "lon": s.get("long"),
-            "easting": s.get("easting"),
-            "northing": s.get("northing"),
-            "datum": s.get("datum"),
+            "label": _scalar(s.get("label")),
+            "river_name": _scalar(s.get("riverName")),
+            "catchment_name": _scalar(s.get("catchmentName")),
+            "town": _scalar(s.get("town")),
+            "lat": _scalar(s.get("lat")),
+            "lon": _scalar(s.get("long")),
+            "easting": _scalar(s.get("easting")),
+            "northing": _scalar(s.get("northing")),
+            "datum": _scalar(s.get("datum")),
             "stage_scale": s.get("stageScale", {}).get("@id") if isinstance(s.get("stageScale"), dict) else None,
         })
 
@@ -168,21 +175,27 @@ def run_full_pipeline(
     warnings_df.to_parquet(warnings_path, index=False)
     print(f"  Saved warnings to {warnings_path}")
 
-    # 3. Optional: pull historical readings for each station
+    # 3. Optional: pull historical readings for each station — parallel fetch
     if fetch_readings:
         stations_to_fetch = stations_df.head(max_stations) if max_stations else stations_df
-        print(f"\nFetching historical readings for {len(stations_to_fetch)} stations...")
-        print("  This will take a while — ~1 request per station with rate limiting")
+        refs = [r for r in stations_to_fetch["station_reference"].tolist() if r]
+        print(f"\nFetching historical readings for {len(refs)} stations (parallel)...")
+
+        _sem = threading.Semaphore(10)  # EA monitoring API: be polite
+
+        def _fetch_with_limit(ref):
+            with _sem:
+                df = fetch_historical_readings(ref, readings_start, readings_end)
+                time.sleep(0.1)
+                return df
 
         all_readings = []
-        for _, row in tqdm(stations_to_fetch.iterrows(), total=len(stations_to_fetch)):
-            ref = row["station_reference"]
-            if not ref:
-                continue
-            df = fetch_historical_readings(ref, readings_start, readings_end)
-            if not df.empty:
-                all_readings.append(df)
-            time.sleep(0.2)  # respect EA rate limits
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            futures = [pool.submit(_fetch_with_limit, ref) for ref in refs]
+            for future in tqdm(as_completed(futures), total=len(futures)):
+                df = future.result()
+                if not df.empty:
+                    all_readings.append(df)
 
         if all_readings:
             readings_df = pd.concat(all_readings, ignore_index=True)
